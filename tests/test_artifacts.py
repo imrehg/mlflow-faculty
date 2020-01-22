@@ -14,6 +14,7 @@
 
 
 from uuid import uuid4
+import os
 import posixpath
 
 import pytest
@@ -110,6 +111,8 @@ def test_faculty_repo_log_artifacts_default_destination(mocker):
 @pytest.mark.parametrize("prefix", ["", "/"])
 @pytest.mark.parametrize("suffix", ["", "/"])
 def test_faculty_repo_list_artifacts(mocker, prefix, suffix):
+    """Test retrieving artifacts in a generic setting.
+    """
     objects = [mocker.Mock() for _ in range(10)]
     list_response_0 = mocker.Mock(objects=objects[:5], next_page_token="token")
     list_response_1 = mocker.Mock(objects=objects[5:], next_page_token=None)
@@ -120,6 +123,9 @@ def test_faculty_repo_list_artifacts(mocker, prefix, suffix):
     mocker.patch("faculty.client", return_value=client)
 
     mock_file_infos = [mocker.Mock() for _ in objects]
+    # Set up arbitrary paths for each mocked file
+    for i, mock_file in enumerate(mock_file_infos[:-1]):
+        mock_file.path = "a/dir/x" + str(i)
     mock_file_infos[-1].path = "/"
     converter_mock = mocker.patch(
         "mlflow_faculty.artifacts.faculty_object_to_mlflow_file_info",
@@ -128,7 +134,8 @@ def test_faculty_repo_list_artifacts(mocker, prefix, suffix):
 
     repo = FacultyDatasetsArtifactRepository(ARTIFACT_URI)
     assert (
-        repo.list_artifacts(prefix + "a/dir" + suffix) == mock_file_infos[:-1]
+        repo.list_artifacts(prefix + "a/dir" + suffix, recursive=True)
+        == mock_file_infos[:-1]
     )
 
     faculty.client.assert_called_once_with("object")
@@ -138,6 +145,50 @@ def test_faculty_repo_list_artifacts(mocker, prefix, suffix):
             mocker.call(PROJECT_ID, ARTIFACT_ROOT + "a/dir/", "token"),
         ]
     )
+    converter_mock.assert_has_calls(
+        [mocker.call(obj, ARTIFACT_ROOT) for obj in objects]
+    )
+
+
+@pytest.mark.parametrize("suffix", ["", "/"])
+def test_faculty_repo_list_artifacts_selective_directory(mocker, suffix):
+    """Test listing artifacts within a given directory,
+    as for example faculty_models.download would use it through mlflow.
+    """
+    mock_files = ["a", "dir1", "dir1/b", "dir2", "dir2/c"]
+    objects = [mocker.Mock() for _ in range(len(mock_files))]
+    list_response = mocker.Mock(objects=objects, next_page_token=None)
+
+    client = mocker.Mock()
+    client.list.side_effect = [list_response]
+
+    mocker.patch("faculty.client", return_value=client)
+
+    # The way the target is created in non-mocked environment, is that
+    # it's either the last folder without suffix, or an empty string as
+    # files are listed already within that particular folder
+    target = "" if suffix == "/" else "dir"
+
+    mock_file_infos = [mocker.Mock() for _ in objects]
+    for i, file_path in enumerate(mock_files):
+        mock_file_infos[i].path = os.path.join(target, file_path)
+    converter_mock = mocker.patch(
+        "mlflow_faculty.artifacts.faculty_object_to_mlflow_file_info",
+        side_effect=mock_file_infos,
+    )
+    # Find the correct answers to our file listing question:
+    # either entries direcly given in the folder if non-empty string passed
+    # or entries in the "current folder" in all situations, which result in
+    # empty dirname.
+    mock_file_infos_correct = [
+        f for f in mock_file_infos if os.path.dirname(f.path) in ["", target]
+    ]
+
+    repo = FacultyDatasetsArtifactRepository(ARTIFACT_URI)
+    assert repo.list_artifacts(target) == mock_file_infos_correct
+
+    faculty.client.assert_called_once_with("object")
+
     converter_mock.assert_has_calls(
         [mocker.call(obj, ARTIFACT_ROOT) for obj in objects]
     )

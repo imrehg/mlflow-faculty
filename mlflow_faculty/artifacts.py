@@ -78,7 +78,20 @@ class FacultyDatasetsArtifactRepository(ArtifactRepository):
         datasets_path = self._datasets_path(artifact_path)
         datasets.put(local_dir, datasets_path, self.project_id)
 
-    def list_artifacts(self, path=None):
+    def list_artifacts(self, path=None, recursive=False):
+        """List artifacts from a repository.
+
+        Args:
+            path (str, optional): the artifact path to list. Defaults
+                to None, to list from the root of the dataset.
+            recursive (bool, optional): if False, list the artifacts
+                in the current path (single file, or contents of a single
+                directory level), otherwise list all artifacts without
+                limits. Defaults to False.
+
+        Returns:
+            List of mlflow.entities.FileInfo objects.
+        """
         if path is None:
             path = "./"
         datasets_path = self._datasets_path(path)
@@ -105,9 +118,14 @@ class FacultyDatasetsArtifactRepository(ArtifactRepository):
             )
             for obj in objects
         ]
-
-        # Remove root
-        return [i for i in infos if i.path != "/"]
+        # Remove root and only list the items directly in the requested path,
+        # without traversing subdirectories
+        return [
+            i
+            for i in infos
+            if i.path not in ["/", "."]
+            and (os.path.dirname(i.path) in ["", path] or recursive)
+        ]
 
     def _download_file(self, remote_file_path, local_path):
         datasets_path = self._datasets_path(remote_file_path)
