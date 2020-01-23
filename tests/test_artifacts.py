@@ -181,7 +181,7 @@ def test_faculty_repo_list_artifacts_selective_directory(mocker, suffix):
     # or entries in the "current folder" in all situations, which result in
     # empty dirname.
     mock_file_infos_correct = [
-        f for f in mock_file_infos if os.path.dirname(f.path) in ["", target]
+        f for f in mock_file_infos if os.path.dirname(f.path) in {"", target}
     ]
 
     repo = FacultyDatasetsArtifactRepository(ARTIFACT_URI)

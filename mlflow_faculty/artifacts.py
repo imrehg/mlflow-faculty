@@ -123,8 +123,8 @@ class FacultyDatasetsArtifactRepository(ArtifactRepository):
         return [
             i
             for i in infos
-            if i.path not in ["/", "."]
-            and (os.path.dirname(i.path) in ["", path] or recursive)
+            if i.path not in {"/", "."}
+            and (os.path.dirname(i.path) in {"", path} or recursive)
         ]
 
     def _download_file(self, remote_file_path, local_path):
